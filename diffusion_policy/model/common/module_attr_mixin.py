@@ -1,5 +1,5 @@
 import torch.nn as nn
-
+# PyTorch混入类, 用于扩展nn.Module的功能, 具体是可以直接获得model的device和dtype
 class ModuleAttrMixin(nn.Module):
     def __init__(self):
         super().__init__()

@@ -33,8 +33,8 @@ class BaseWorkspace:
         pass
 
     def save_checkpoint(self, path=None, tag='latest', 
-            exclude_keys=None,
-            include_keys=None,
+            exclude_keys=None, # 不保存的属性
+            include_keys=None, # 保存的属性
             use_thread=True):
         if path is None:
             path = pathlib.Path(self.output_dir).joinpath('checkpoints', f'{tag}.ckpt')
@@ -53,6 +53,7 @@ class BaseWorkspace:
         } 
 
         for key, value in self.__dict__.items():
+            # Torch模型等具有'state_dict'的对象
             if hasattr(value, 'state_dict') and hasattr(value, 'load_state_dict'):
                 # modules, optimizers and samplers etc
                 if key not in exclude_keys:
@@ -60,9 +61,12 @@ class BaseWorkspace:
                         payload['state_dicts'][key] = _copy_to_cpu(value.state_dict())
                     else:
                         payload['state_dicts'][key] = value.state_dict()
+            # 其他需要保存的对象用pickle序列化保存
+            # dill对pickle库功能进行了扩展
             elif key in include_keys:
                 payload['pickles'][key] = dill.dumps(value)
         if use_thread:
+            # 将tensor转移到cpu上, 使用后台线程保存, 以不阻塞主程序的运行
             self._saving_thread = threading.Thread(
                 target=lambda : torch.save(payload, path.open('wb'), pickle_module=dill))
             self._saving_thread.start()
@@ -100,20 +104,20 @@ class BaseWorkspace:
             include_keys=include_keys)
         return payload
     
-    @classmethod
+    @classmethod # 直接用类调用, 返回workspace实例
     def create_from_checkpoint(cls, path, 
             exclude_keys=None, 
             include_keys=None,
             **kwargs):
         payload = torch.load(open(path, 'rb'), pickle_module=dill)
-        instance = cls(payload['cfg'])
+        instance = cls(payload['cfg']) # == BaseWorkSpace(payload['cfg])
         instance.load_payload(
             payload=payload, 
             exclude_keys=exclude_keys,
             include_keys=include_keys,
             **kwargs)
         return instance
-
+    # 直接保存整个WorkSpace对象
     def save_snapshot(self, tag='latest'):
         """
         Quick loading and saving for reserach, saves full state of the workspace.

@@ -10,6 +10,7 @@ from diffusion_policy.model.bet.action_ae.discretizers.k_means import KMeansDisc
 from diffusion_policy.model.bet.latent_generators.mingpt import MinGPT
 from diffusion_policy.model.bet.utils import eval_mode
 
+# Behavior Transformer
 class BETLowdimPolicy(BaseLowdimPolicy):
     def __init__(self, 
             action_ae: KMeansDiscretizer, 
@@ -42,6 +43,7 @@ class BETLowdimPolicy(BaseLowdimPolicy):
         T = self.horizon
 
         # pad To to T
+        # 未知的观察初始化为-2
         obs = torch.full((B,T,Do), -2, dtype=nobs.dtype, device=nobs.device)
         obs[:,:To,:] = nobs[:,:To,:]
 

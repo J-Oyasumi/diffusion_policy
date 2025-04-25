@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn
-
+# 混入类，用于管理复杂参数结构的PyTorch模型
 class DictOfTensorMixin(nn.Module):
     def __init__(self, params_dict=None):
         super().__init__()

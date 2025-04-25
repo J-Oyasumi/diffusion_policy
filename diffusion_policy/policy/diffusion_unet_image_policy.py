@@ -41,10 +41,14 @@ class DiffusionUnetImagePolicy(BaseImagePolicy):
         # create diffusion model
         input_dim = action_dim + obs_feature_dim
         global_cond_dim = None
-        if obs_as_global_cond:
-            input_dim = action_dim
-            global_cond_dim = obs_feature_dim * n_obs_steps
-
+        if obs_as_global_cond: 
+            input_dim = action_dim 
+            global_cond_dim = obs_feature_dim * n_obs_steps 
+        """
+        如果 obs_as_global_cond=True,
+        则obs作为全局条件输入到模型中, 此时UNet输入仅包含action
+        否则没有全局条件输入, UNet输入包含action和obs特征
+        """
         model = ConditionalUnet1D(
             input_dim=input_dim,
             local_cond_dim=None,

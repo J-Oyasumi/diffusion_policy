@@ -36,7 +36,7 @@ class ConditionalResidualBlock1D(nn.Module):
         self.cond_encoder = nn.Sequential(
             nn.Mish(),
             nn.Linear(cond_dim, cond_channels),
-            Rearrange('batch t -> batch t 1'),
+            Rearrange('batch t -> batch t 1'), # batch t -> batch t 1 基于字符串来对tensor进行重排
         )
 
         # make sure dimensions compatible
@@ -90,11 +90,11 @@ class ConditionalUnet1D(nn.Module):
         )
         cond_dim = dsed
         if global_cond_dim is not None:
-            cond_dim += global_cond_dim
+            cond_dim += global_cond_dim # 有全局条件输入
 
-        in_out = list(zip(all_dims[:-1], all_dims[1:]))
+        in_out = list(zip(all_dims[:-1], all_dims[1:])) # NOTE: coding trick
 
-        local_cond_encoder = None
+        local_cond_encoder = None 
         if local_cond_dim is not None:
             _, dim_out = in_out[0]
             dim_in = local_cond_dim

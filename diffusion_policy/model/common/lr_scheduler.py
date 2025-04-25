@@ -2,7 +2,7 @@ from diffusers.optimization import (
     Union, SchedulerType, Optional,
     Optimizer, TYPE_TO_SCHEDULER_FUNCTION
 )
-
+# 对diffuser原有库的扩展，支持更多参数，获得scheduler
 def get_scheduler(
     name: Union[str, SchedulerType],
     optimizer: Optimizer,

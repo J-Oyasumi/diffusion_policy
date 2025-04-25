@@ -187,50 +187,51 @@ def _fit(data: Union[torch.Tensor, np.ndarray, zarr.Array],
         output_min=-1.,
         range_eps=1e-4,
         fit_offset=True):
-    assert mode in ['limits', 'gaussian']
+    assert mode in ['limits', 'gaussian'] # limits:映射到一个区间 gaussian:转为标准正态分布
     assert last_n_dims >= 0
     assert output_max > output_min
 
     # convert data to torch and type
     if isinstance(data, zarr.Array):
-        data = data[:]
+        data = data[:] # 将整个zarr数组加载到内存中，因为zarr通常是延迟加载的，同时将zarr转为numpy宿主
     if isinstance(data, np.ndarray):
-        data = torch.from_numpy(data)
+        data = torch.from_numpy(data) # numpy数组转为pytorch张量
     if dtype is not None:
-        data = data.type(dtype)
+        data = data.type(dtype) # 如果指定了数据类型，则将数据转换为指定的数据类型
 
     # convert shape
     dim = 1
     if last_n_dims > 0:
-        dim = np.prod(data.shape[-last_n_dims:])
-    data = data.reshape(-1,dim)
+        dim = np.prod(data.shape[-last_n_dims:]) # 计算data.shape的最后last_n_dims个维度的乘积
+    data = data.reshape(-1,dim) # 展平为二维矩阵
 
-    # compute input stats min max mean std
+    # compute input stats min max mean std 计算二维矩阵每一列的最小值、最大值、均值和标准差, 形状 (dim,) 
     input_min, _ = data.min(axis=0)
     input_max, _ = data.max(axis=0)
     input_mean = data.mean(axis=0)
     input_std = data.std(axis=0)
-
+    
     # compute scale and offset
     if mode == 'limits':
-        if fit_offset:
+        if fit_offset: # 严格映射到[output_min, output_max]
             # unit scale
             input_range = input_max - input_min
             ignore_dim = input_range < range_eps
-            input_range[ignore_dim] = output_max - output_min
-            scale = (output_max - output_min) / input_range
-            offset = output_min - scale * input_min
-            offset[ignore_dim] = (output_max + output_min) / 2 - input_min[ignore_dim]
+            input_range[ignore_dim] = output_max - output_min # 修改近似恒定维度为输出范围值，使得对应scale的值为1
+            # 对于近似恒定维度，如果不这么处理，scale会变得非常大
+            scale = (output_max - output_min) / input_range # scale 为输出范围除以输入范围
+            offset = output_min - scale * input_min # x_normalized = x * scale + offset
+            offset[ignore_dim] = (output_max + output_min) / 2 - input_min[ignore_dim] # 近似恒定维度映射到输出范围的中点
             # ignore dims scaled to mean of output max and min
         else:
             # use this when data is pre-zero-centered.
             assert output_max > 0
             assert output_min < 0
             # unit abs
-            output_abs = min(abs(output_min), abs(output_max))
-            input_abs = torch.maximum(torch.abs(input_min), torch.abs(input_max))
+            output_abs = min(abs(output_min), abs(output_max)) # 取输出范围两端绝对值的最小值
+            input_abs = torch.maximum(torch.abs(input_min), torch.abs(input_max)) # 取输入范围两端绝对值的最大值
             ignore_dim = input_abs < range_eps
-            input_abs[ignore_dim] = output_abs
+            input_abs[ignore_dim] = output_abs # 恒定维度的scale为1
             # don't scale constant channels 
             scale = output_abs / input_abs
             offset = torch.zeros_like(input_mean)
@@ -269,10 +270,10 @@ def _normalize(x, params, forward=True):
     offset = params['offset']
     x = x.to(device=scale.device, dtype=scale.dtype)
     src_shape = x.shape
-    x = x.reshape(-1, scale.shape[0])
-    if forward:
+    x = x.reshape(-1, scale.shape[0]) # 展平为二维矩阵，与_fit中的data相同
+    if forward: # 正向归一化
         x = x * scale + offset
-    else:
+    else: # 反向归一化
         x = (x - offset) / scale
     x = x.reshape(src_shape)
     return x

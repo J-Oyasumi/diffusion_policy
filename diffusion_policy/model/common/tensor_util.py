@@ -19,6 +19,16 @@ def recursive_dict_list_tuple_apply(x, type_func_dict):
 
     Returns:
         y (dict or list or tuple): new nested dict-list-tuple
+        
+    使用示例： 将嵌套结构中所有numpy数组转为pytorch张量
+    result = recursive_dict_list_tuple_apply(
+        data,
+        {
+            torch.Tensor: lambda x: x,  # 保持张量不变
+            np.ndarray: lambda x: torch.from_numpy(x),  # 转换数组为张量
+            type(None): lambda x: x,  # 保持None值不变
+        }
+    )
     """
     assert(list not in type_func_dict)
     assert(tuple not in type_func_dict)
@@ -488,6 +498,15 @@ def reshape_dimensions_single(x, begin_axis, end_axis, target_dims):
 
     Returns:
         y (torch.Tensor): reshaped tensor
+    
+    使用示例：
+    假设有一个张量 tensor 形状为 [32, 10, 24, 24, 3]，我们想要将其重塑为不同的形状：
+    
+    # 将中间的时间和空间维度 [10,24,24] 重塑为单个特征维度
+    result = reshape_dimensions_single(tensor, 1, 3, [-1])  # 结果形状: [32, 5760, 3]
+
+    # 将时间和高度维度 [10,24] 重塑为 [5,48]
+    result = reshape_dimensions_single(tensor, 1, 2, [5, 48])  # 结果形状: [32, 5, 48, 24, 3]
     """
     assert(begin_axis <= end_axis)
     assert(begin_axis >= 0)

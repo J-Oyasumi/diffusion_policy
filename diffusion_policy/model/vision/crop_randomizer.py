@@ -93,13 +93,17 @@ class CropRandomizer(nn.Module):
                 pos_enc=self.pos_enc,
             )
             # [B, N, ...] -> [B * N, ...]
-            return tu.join_dimensions(out, 0, 1)
+            return tu.join_dimensions(out, 0, 1) 
         else:
-            # take center crop during eval
+            # take center crop during eval 评估的时候使用确定性的中心裁剪，确保结果稳定
             out = ttf.center_crop(img=inputs, output_size=(
                 self.crop_height, self.crop_width))
             if self.num_crops > 1:
                 B,C,H,W = out.shape
+                # unsqueeze(1): [B, C, H, W] -> [B, 1, C, H, W]
+                # expand: [B, 1, C, H, W] -> [B, N, C, H, W]
+                # reshape: [B, N, C, H, W] -> [B * N, C, H, W]
+                # 确保评估阶段数据的形状与训练阶段一致
                 out = out.unsqueeze(1).expand(B,self.num_crops,C,H,W).reshape(-1,C,H,W)
                 # [B * N, ...]
             return out
@@ -109,6 +113,12 @@ class CropRandomizer(nn.Module):
         Splits the outputs from shape [B * N, ...] -> [B, N, ...] and then average across N
         to result in shape [B, ...] to make sure the network output is consistent with
         what would have happened if there were no randomization.
+        
+        [B*N, ...] (输入张量) 
+            ↓ reshape_dimensions
+        [B, N, ...] (重塑后的张量)
+            ↓ mean(dim=1)
+        [B, ...] (输出张量)
         """
         if self.num_crops <= 1:
             return inputs
@@ -207,7 +217,8 @@ def crop_image_from_indices(images, crop_indices, crop_height, crop_width):
     # Repeat and flatten the source images -> [..., N, C, H * W] and then use gather to index with crop pixel inds
     images_to_crop = tu.unsqueeze_expand_at(images, size=num_crops, dim=-4)
     images_to_crop = tu.flatten(images_to_crop, begin_axis=-2)
-    crops = torch.gather(images_to_crop, dim=-1, index=all_crop_inds)
+    # torch.gather 对张量沿指定维度根据索引收集值
+    crops = torch.gather(images_to_crop, dim=-1, index=all_crop_inds) # 裁剪的过程
     # [..., N, C, CH * CW] -> [..., N, C, CH, CW]
     reshape_axis = len(crops.shape) - 1
     crops = tu.reshape_dimensions(crops, begin_axis=reshape_axis, end_axis=reshape_axis, 
@@ -250,18 +261,18 @@ def sample_random_image_crops(images, crop_height, crop_width, num_crops, pos_en
     if pos_enc:
         # spatial encoding [y, x] in [0, 1]
         h, w = source_im.shape[-2:]
-        pos_y, pos_x = torch.meshgrid(torch.arange(h), torch.arange(w))
+        pos_y, pos_x = torch.meshgrid(torch.arange(h), torch.arange(w)) # pos_y: (H, W) [[0,0,...0],[1,1,...1],...[h-1,h-1,...h-1]] 同理pos_x每列是相同的
         pos_y = pos_y.float().to(device) / float(h)
         pos_x = pos_x.float().to(device) / float(w)
-        position_enc = torch.stack((pos_y, pos_x)) # shape [C, H, W]
+        position_enc = torch.stack((pos_y, pos_x)) # shape [2, H, W]
 
-        # unsqueeze and expand to match leading dimensions -> shape [..., C, H, W]
+        # unsqueeze and expand to match leading dimensions -> shape [..., C, H, W] 将位置编码的维度扩展到与输入图像相同
         leading_shape = source_im.shape[:-3]
         position_enc = position_enc[(None,) * len(leading_shape)]
-        position_enc = position_enc.expand(*leading_shape, -1, -1, -1)
+        position_enc = position_enc.expand(*leading_shape, -1, -1, -1) # -1表示保持原有维度
 
         # concat across channel dimension with input
-        source_im = torch.cat((source_im, position_enc), dim=-3)
+        source_im = torch.cat((source_im, position_enc), dim=-3)  # 这里的位置编码用二维矩阵(H,W)的下标表示，可以从pos_y，pos_x中看出
 
     # make sure sample boundaries ensure crops are fully within the images
     image_c, image_h, image_w = source_im.shape[-3:]
@@ -274,9 +285,9 @@ def sample_random_image_crops(images, crop_height, crop_width, num_crops, pos_en
     # or possibly no leading dimension.
     #
     # Trick: sample in [0, 1) with rand, then re-scale to [0, M) and convert to long to get sampled ints
-    crop_inds_h = (max_sample_h * torch.rand(*source_im.shape[:-3], num_crops).to(device)).long()
-    crop_inds_w = (max_sample_w * torch.rand(*source_im.shape[:-3], num_crops).to(device)).long()
-    crop_inds = torch.cat((crop_inds_h.unsqueeze(-1), crop_inds_w.unsqueeze(-1)), dim=-1) # shape [..., N, 2]
+    crop_inds_h = (max_sample_h * torch.rand(*source_im.shape[:-3], num_crops).to(device)).long() # 随即选择行起始索引
+    crop_inds_w = (max_sample_w * torch.rand(*source_im.shape[:-3], num_crops).to(device)).long() # 随即选择列起始索引
+    crop_inds = torch.cat((crop_inds_h.unsqueeze(-1), crop_inds_w.unsqueeze(-1)), dim=-1) # shape [..., N, 2] 
 
     crops = crop_image_from_indices(
         images=source_im, 

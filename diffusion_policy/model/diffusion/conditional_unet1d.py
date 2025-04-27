@@ -11,14 +11,15 @@ from diffusion_policy.model.diffusion.positional_embedding import SinusoidalPosE
 
 logger = logging.getLogger(__name__)
 
+# 作用：一维特征提取，同时融入信息
 class ConditionalResidualBlock1D(nn.Module):
     def __init__(self, 
             in_channels, 
             out_channels, 
-            cond_dim,
+            cond_dim, # 条件向量的维度 (batch_size, cond_dim)
             kernel_size=3,
-            n_groups=8,
-            cond_predict_scale=False):
+            n_groups=8, # GroupNorm中的组数
+            cond_predict_scale=False): # if False, 只预测FiLM中的bias
         super().__init__()
 
         self.blocks = nn.ModuleList([
@@ -33,7 +34,7 @@ class ConditionalResidualBlock1D(nn.Module):
             cond_channels = out_channels * 2
         self.cond_predict_scale = cond_predict_scale
         self.out_channels = out_channels
-        self.cond_encoder = nn.Sequential(
+        self.cond_encoder = nn.Sequential( # encode条件向量
             nn.Mish(),
             nn.Linear(cond_dim, cond_channels),
             Rearrange('batch t -> batch t 1'), # batch t -> batch t 1 基于字符串来对tensor进行重排
@@ -50,17 +51,19 @@ class ConditionalResidualBlock1D(nn.Module):
 
             returns:
             out : [ batch_size x out_channels x horizon ]
+
+            x -> blocks[0] -> FiLM -> blocks[1] -> residual_conv -> out
         '''
-        out = self.blocks[0](x)
-        embed = self.cond_encoder(cond)
+        out = self.blocks[0](x) # (batch_size, out_channels, horizon)
+        embed = self.cond_encoder(cond)  # (batch_size, cond_channels, 1)
         if self.cond_predict_scale:
             embed = embed.reshape(
                 embed.shape[0], 2, self.out_channels, 1)
             scale = embed[:,0,...]
             bias = embed[:,1,...]
-            out = scale * out + bias
+            out = scale * out + bias # FiLM操作的核心, 对每个通道都应用不同的scale和bias
         else:
-            out = out + embed
+            out = out + embed # 直接对每个通道加上bias
         out = self.blocks[1](out)
         out = out + self.residual_conv(x)
         return out
@@ -90,8 +93,8 @@ class ConditionalUnet1D(nn.Module):
         )
         cond_dim = dsed
         if global_cond_dim is not None:
-            cond_dim += global_cond_dim # 有全局条件输入
-
+            cond_dim += global_cond_dim 
+        # cond 包括diffusion step, 也可能包含其他全局条件输入
         in_out = list(zip(all_dims[:-1], all_dims[1:])) # NOTE: coding trick
 
         local_cond_encoder = None 

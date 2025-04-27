@@ -72,7 +72,7 @@ class LowdimMaskGenerator(ModuleAttrMixin):
             dtype=torch.bool, device=device)
         is_action_dim = dim_mask.clone()
         is_action_dim[...,:self.action_dim] = True
-        is_obs_dim = ~is_action_dim
+        is_obs_dim = ~is_action_dim # 取反
 
         # generate obs mask
         if self.fix_obs_steps:
